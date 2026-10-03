@@ -29,6 +29,7 @@ internal static class Theme
     public static readonly Font Title = new("Segoe UI Semibold", 16f);
     public static readonly Font Icon = new("Segoe MDL2 Assets", 10f);
     public static readonly Font IconLarge = new("Segoe MDL2 Assets", 14f);
+    public static readonly Font IconSmall = new("Segoe MDL2 Assets", 7.5f);
 
     // Segoe MDL2 Assets glyphs
     public const string GlyphRefresh = "";
@@ -39,6 +40,8 @@ internal static class Theme
     public const string GlyphApp = "";
     public const string GlyphKeyboard = "";
     public const string GlyphReset = "";
+    public const string GlyphAdd = "";
+    public const string GlyphDelete = "";
 
     /// <summary>Scales a 96-DPI pixel value to the control's current DPI.</summary>
     public static int S(this Control c, int value) => (int)Math.Round(value * c.DeviceDpi / 96.0);

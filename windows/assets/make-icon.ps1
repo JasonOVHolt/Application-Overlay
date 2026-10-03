@@ -44,7 +44,7 @@ function Render([int]$size) {
     $g.Dispose()
     $ms = New-Object System.IO.MemoryStream
     $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-    if ($size -eq 256) { $bmp.Save("$outDir\app-256.png") }
+    if ($size -ge 256) { $bmp.Save("$outDir\app-$size.png") }  # app-256 preview; app-1024 for macOS/Linux
     $bmp.Dispose()
     return ,$ms.ToArray()
 }
@@ -67,3 +67,7 @@ for ($i = 0; $i -lt $sizes.Count; $i++) {
 foreach ($img in $images) { $w.Write($img) }
 $w.Close()
 "Wrote $outDir\app.ico"
+
+# Large PNG for the macOS app icon (built into .icns by macos/build-app.sh) and Linux.
+$null = Render 1024
+"Wrote $outDir\app-1024.png"

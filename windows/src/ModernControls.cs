@@ -14,6 +14,12 @@ internal abstract class DrawnControl : Control
         Font = Theme.Body;
     }
 
+    protected override void OnEnabledChanged(EventArgs e)
+    {
+        base.OnEnabledChanged(e);
+        Invalidate();
+    }
+
     protected static Graphics Smooth(Graphics g)
     {
         g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -194,27 +200,29 @@ internal sealed class ToggleSwitch : DrawnControl
 
         int sw = this.S(40), sh = this.S(22);
         var track = new RectangleF(Width - sw - 1, (Height - sh) / 2f, sw, sh);
-        Color off = _hover ? Theme.Border : Theme.Track;
-        Theme.FillRounded(g, Theme.Blend(off, Theme.Accent, _pos), track, sh / 2f);
+        Color off = _hover && Enabled ? Theme.Border : Theme.Track;
+        Color on = Enabled ? Theme.Accent : Theme.Blend(Theme.Accent, BackColor, 0.6f);
+        Theme.FillRounded(g, Theme.Blend(off, on, _pos), track, sh / 2f);
         if (Focused && ShowFocusCues) Theme.DrawRounded(g, Theme.AccentHover, RectangleF.Inflate(track, 2, 2), sh / 2f + 2, 1.5f);
 
         float knob = sh - this.S(6);
         float kx = track.X + this.S(3) + (sw - knob - this.S(6)) * _pos;
-        using (var white = new SolidBrush(Color.White))
-            g.FillEllipse(white, kx, track.Y + this.S(3), knob, knob);
+        using (var knobBrush = new SolidBrush(Enabled ? Color.White : Theme.TextMuted))
+            g.FillEllipse(knobBrush, kx, track.Y + this.S(3), knob, knob);
 
         var textArea = new Rectangle(0, 0, Width - sw - this.S(12), Height);
         var flags = TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine;
+        Color textColor = Enabled ? Theme.Text : Theme.TextMuted;
         if (Description == null)
         {
-            TextRenderer.DrawText(g, Text, Theme.Body, textArea, Theme.Text, flags | TextFormatFlags.VerticalCenter);
+            TextRenderer.DrawText(g, Text, Theme.Body, textArea, textColor, flags | TextFormatFlags.VerticalCenter);
         }
         else
         {
             int titleH = TextRenderer.MeasureText(Text, Theme.Body).Height;
             int descH = TextRenderer.MeasureText(Description, Theme.Small).Height;
             int y = (Height - titleH - descH) / 2;
-            TextRenderer.DrawText(g, Text, Theme.Body, new Rectangle(0, y, textArea.Width, titleH), Theme.Text, flags);
+            TextRenderer.DrawText(g, Text, Theme.Body, new Rectangle(0, y, textArea.Width, titleH), textColor, flags);
             TextRenderer.DrawText(g, Description, Theme.Small, new Rectangle(0, y + titleH, textArea.Width, descH), Theme.TextMuted, flags);
         }
     }
@@ -424,117 +432,5 @@ internal sealed class StatusBar : DrawnControl
         var textRect = new Rectangle((int)(d + this.S(10)), 0, Width - (int)d - this.S(10), Height);
         TextRenderer.DrawText(g, Text, Theme.Body, textRect, _kind == StatusKind.Idle ? Theme.TextMuted : Theme.Text,
             TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
-    }
-}
-
-/// <summary>Owner-drawn list of windows with app icons, process names and a LIVE badge.</summary>
-internal sealed class WindowListBox : ListBox
-{
-    private int _hoverIndex = -1;
-    private IntPtr _liveHandle;
-
-    public WindowListBox()
-    {
-        DrawMode = DrawMode.OwnerDrawFixed;
-        BorderStyle = BorderStyle.None;
-        IntegralHeight = false;
-        BackColor = Theme.Surface;
-        ForeColor = Theme.Text;
-        Font = Theme.Body;
-        ItemHeight = Math.Min(255, this.S(48));
-    }
-
-    /// <summary>The window currently being mirrored (gets a LIVE badge).</summary>
-    public IntPtr LiveHandle
-    {
-        get => _liveHandle;
-        set { _liveHandle = value; Invalidate(); }
-    }
-
-    protected override void OnHandleCreated(EventArgs e)
-    {
-        base.OnHandleCreated(e);
-        Theme.UseDarkScrollbars(Handle);
-    }
-
-    protected override void OnMouseMove(MouseEventArgs e)
-    {
-        base.OnMouseMove(e);
-        int index = IndexFromPoint(e.Location);
-        if (index == _hoverIndex) return;
-        InvalidateItem(_hoverIndex);
-        _hoverIndex = index;
-        InvalidateItem(_hoverIndex);
-        Cursor = index >= 0 ? Cursors.Hand : Cursors.Default;
-    }
-
-    protected override void OnMouseLeave(EventArgs e)
-    {
-        base.OnMouseLeave(e);
-        InvalidateItem(_hoverIndex);
-        _hoverIndex = -1;
-    }
-
-    private void InvalidateItem(int index)
-    {
-        if (index >= 0 && index < Items.Count) Invalidate(GetItemRectangle(index));
-    }
-
-    protected override void OnDrawItem(DrawItemEventArgs e)
-    {
-        var g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        using (var bg = new SolidBrush(BackColor)) g.FillRectangle(bg, e.Bounds);
-        if (e.Index < 0 || e.Index >= Items.Count || Items[e.Index] is not WindowInfo w) return;
-
-        bool selected = (e.State & DrawItemState.Selected) != 0;
-        var r = new RectangleF(e.Bounds.X + this.S(2), e.Bounds.Y + this.S(2), e.Bounds.Width - this.S(4), e.Bounds.Height - this.S(4));
-        float radius = this.S(8);
-
-        if (selected)
-        {
-            Theme.FillRounded(g, Color.FromArgb(48, Theme.Accent), r, radius);
-            Theme.DrawRounded(g, Color.FromArgb(140, Theme.Accent), r, radius);
-        }
-        else if (e.Index == _hoverIndex)
-        {
-            Theme.FillRounded(g, Theme.SurfaceHover, r, radius);
-        }
-
-        // Icon
-        int iconSize = this.S(24);
-        var iconRect = new Rectangle((int)r.X + this.S(12), (int)(r.Y + (r.Height - iconSize) / 2), iconSize, iconSize);
-        if (w.Icon != null)
-        {
-            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            g.DrawImage(w.Icon, iconRect);
-        }
-        else
-        {
-            TextRenderer.DrawText(g, Theme.GlyphApp, Theme.IconLarge, iconRect, Theme.TextMuted,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-        }
-
-        // LIVE badge
-        int right = (int)r.Right - this.S(12);
-        if (w.Handle == _liveHandle)
-        {
-            const string live = "LIVE";
-            var size = TextRenderer.MeasureText(live, Theme.Small);
-            var badge = new RectangleF(right - size.Width - this.S(12), r.Y + (r.Height - this.S(20)) / 2, size.Width + this.S(12), this.S(20));
-            Theme.FillRounded(g, Color.FromArgb(40, Theme.Success), badge, badge.Height / 2);
-            TextRenderer.DrawText(g, live, Theme.Small, Rectangle.Round(badge), Theme.Success,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            right = (int)badge.X - this.S(8);
-        }
-
-        // Title + process name
-        int textLeft = iconRect.Right + this.S(12);
-        var flags = TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
-        int titleH = TextRenderer.MeasureText("Ag", Theme.BodyStrong).Height;
-        int procH = TextRenderer.MeasureText("Ag", Theme.Small).Height;
-        int y = (int)(r.Y + (r.Height - titleH - procH) / 2);
-        TextRenderer.DrawText(g, w.Title, Theme.BodyStrong, new Rectangle(textLeft, y, right - textLeft, titleH), Theme.Text, flags);
-        TextRenderer.DrawText(g, w.ProcessName, Theme.Small, new Rectangle(textLeft, y + titleH, right - textLeft, procH), Theme.TextMuted, flags);
     }
 }

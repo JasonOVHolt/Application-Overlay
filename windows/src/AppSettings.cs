@@ -7,6 +7,9 @@ internal sealed class AppSettings
 {
     public Keys ToggleHotkey { get; set; } = Keys.Control | Keys.Alt | Keys.O;
 
+    /// <summary>Overlays snap flush to monitor edges when dragged or resized near them.</summary>
+    public bool SnapToEdges { get; set; }
+
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OverlayApp", "settings.json");
 

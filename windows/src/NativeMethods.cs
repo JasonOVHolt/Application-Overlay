@@ -19,6 +19,15 @@ internal static class NativeMethods
 
     public const int WM_NCHITTEST = 0x0084;
     public const int WM_HOTKEY = 0x0312;
+    public const int WM_SIZING = 0x0214;
+    public const int WM_MOVING = 0x0216;
+    public const int WM_ENTERSIZEMOVE = 0x0231;
+    public const int WM_EXITSIZEMOVE = 0x0232;
+    public const int WM_NCLBUTTONDOWN = 0x00A1;
+
+    // WM_SIZING edges
+    public const int WMSZ_LEFT = 1, WMSZ_RIGHT = 2, WMSZ_TOP = 3, WMSZ_TOPLEFT = 4,
+        WMSZ_TOPRIGHT = 5, WMSZ_BOTTOM = 6, WMSZ_BOTTOMLEFT = 7, WMSZ_BOTTOMRIGHT = 8;
 
     public const int HTCLIENT = 1;
     public const int HTCAPTION = 2;
@@ -100,6 +109,23 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor; // full monitor, physical pixels
+        public RECT rcWork;    // monitor minus taskbar / docked app bars
+        public uint dwFlags;
+    }
+
+    public const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromRect(ref RECT lprc, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
     [DllImport("user32.dll")]
     public static extern bool IsWindow(IntPtr hWnd);

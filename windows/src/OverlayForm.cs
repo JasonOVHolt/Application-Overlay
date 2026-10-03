@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using static OverlayApp.NativeMethods;
 
 namespace OverlayApp;
@@ -13,13 +14,15 @@ internal readonly record struct Crop(double Left, double Top, double Right, doub
 /// </summary>
 internal sealed class OverlayForm : Form
 {
-    private const int BorderPx = 4;
-    private const int GripPx = 10;
+    // Sizes in 96-DPI pixels, scaled to the monitor the overlay is on (DeviceDpi follows it between monitors).
+    private int BorderPx => this.S(4);
+    private int GripPx => this.S(10);
 
     // Pixels of this colour become fully transparent (used for the letterbox area).
     private static readonly Color KeyColor = Color.FromArgb(255, 0, 255);
     private static readonly Color EditBackColor = Theme.Background;
     private static readonly Color EditBorderColor = Theme.Accent;
+    private static readonly Color EditBorderInactiveColor = Theme.Track;
 
     private readonly System.Windows.Forms.Timer _watchTimer;
     private IntPtr _source;
@@ -29,6 +32,7 @@ internal sealed class OverlayForm : Form
     private byte _alpha = 255;
     private bool _clientAreaOnly = true;
     private Crop _crop;
+    private bool _selected = true;
 
     /// <summary>Raised when the mirrored window is closed.</summary>
     public event EventHandler? SourceLost;
@@ -40,7 +44,7 @@ internal sealed class OverlayForm : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        MinimumSize = new Size(80, 50);
+        MinimumSize = new Size(this.S(80), this.S(50));
         BackColor = EditBackColor;
         DoubleBuffered = true;
 
@@ -108,6 +112,13 @@ internal sealed class OverlayForm : Form
         set { _crop = value; UpdateThumbnail(); }
     }
 
+    /// <summary>Whether this is the overlay being edited in the main window (blue border vs grey).</summary>
+    public bool Selected
+    {
+        get => _selected;
+        set { _selected = value; Invalidate(); }
+    }
+
     /// <summary>Resizes the overlay (keeping its width) so it matches the source's aspect ratio.</summary>
     public void FitToSource()
     {
@@ -141,6 +152,15 @@ internal sealed class OverlayForm : Form
         base.Dispose(disposing);
     }
 
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        // Moved to a monitor with different scaling: rescale the minimum size, border and grips.
+        base.OnDpiChanged(e);
+        MinimumSize = new Size(this.S(80), this.S(50));
+        UpdateThumbnail();
+        Invalidate();
+    }
+
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
@@ -153,7 +173,7 @@ internal sealed class OverlayForm : Form
         base.OnPaint(e);
         if (_clickThrough) return;
 
-        using var pen = new Pen(EditBorderColor, BorderPx);
+        using var pen = new Pen(_selected ? EditBorderColor : EditBorderInactiveColor, BorderPx);
         var r = ClientRectangle;
         r.Inflate(-BorderPx / 2, -BorderPx / 2);
         e.Graphics.DrawRectangle(pen, r);
@@ -174,7 +194,134 @@ internal sealed class OverlayForm : Form
             m.Result = (IntPtr)HitTest(pt);
             return;
         }
+        // Remember where the drag started so snapping can be based on the real mouse movement.
+        // Record at mouse-down: by WM_ENTERSIZEMOVE the cursor has already passed Windows' drag threshold.
+        if (m.Msg == WM_NCLBUTTONDOWN)
+        {
+            _dragStartRect = new RECT(Left, Top, Right, Bottom);
+            _dragStartCursor = Cursor.Position;
+            _dragStartRecorded = true;
+        }
+        else if (m.Msg == WM_ENTERSIZEMOVE && !_dragStartRecorded)
+        {
+            _dragStartRect = new RECT(Left, Top, Right, Bottom);
+            _dragStartCursor = Cursor.Position;
+        }
+        else if (m.Msg == WM_EXITSIZEMOVE)
+        {
+            _dragStartRecorded = false;
+        }
+        if (SnapToEdges && m.Msg is WM_MOVING or WM_SIZING)
+        {
+            // Windows proposes a rectangle relative to the window's *current* (possibly snapped) position,
+            // so snapping that would stick forever. Instead rebuild the rectangle the user is actually asking
+            // for from the mouse movement since the drag began, then snap that.
+            var proposed = Marshal.PtrToStructure<RECT>(m.LParam);
+            var delta = new Size(Cursor.Position.X - _dragStartCursor.X, Cursor.Position.Y - _dragStartCursor.Y);
+            var rect = m.Msg == WM_MOVING
+                ? SnapMove(Offset(_dragStartRect, delta))
+                : SnapSize(ResizeFromStart(m.WParam.ToInt32(), delta, proposed), m.WParam.ToInt32());
+            Marshal.StructureToPtr(rect, m.LParam, false);
+            m.Result = (IntPtr)1;
+            return;
+        }
         base.WndProc(ref m);
+    }
+
+    /// <summary>When true, dragging or resizing near a monitor edge snaps the overlay flush to it.</summary>
+    public bool SnapToEdges { get; set; }
+
+    /// <summary>Screen bounds of the other overlays, which this one also snaps to.</summary>
+    public Func<IEnumerable<Rectangle>>? OtherOverlays { get; set; }
+
+    private RECT _dragStartRect;
+    private Point _dragStartCursor;
+    private bool _dragStartRecorded;
+
+    private int SnapDistance => (int)Math.Round(20 * DeviceDpi / 96.0);
+
+    private static RECT Offset(RECT r, Size d) => new(r.Left + d.Width, r.Top + d.Height, r.Right + d.Width, r.Bottom + d.Height);
+
+    /// <summary>The unsnapped rectangle for a resize: the start rectangle with the dragged edges moved by the mouse delta.</summary>
+    private RECT ResizeFromStart(int edge, Size d, RECT proposed)
+    {
+        var r = _dragStartRect;
+        if (edge is WMSZ_LEFT or WMSZ_TOPLEFT or WMSZ_BOTTOMLEFT) r.Left = Math.Min(r.Left + d.Width, r.Right - MinimumSize.Width);
+        if (edge is WMSZ_RIGHT or WMSZ_TOPRIGHT or WMSZ_BOTTOMRIGHT) r.Right = Math.Max(r.Right + d.Width, r.Left + MinimumSize.Width);
+        if (edge is WMSZ_TOP or WMSZ_TOPLEFT or WMSZ_TOPRIGHT) r.Top = Math.Min(r.Top + d.Height, r.Bottom - MinimumSize.Height);
+        if (edge is WMSZ_BOTTOM or WMSZ_BOTTOMLEFT or WMSZ_BOTTOMRIGHT) r.Bottom = Math.Max(r.Bottom + d.Height, r.Top + MinimumSize.Height);
+        return edge is >= WMSZ_LEFT and <= WMSZ_BOTTOMRIGHT ? r : proposed;
+    }
+
+    /// <summary>
+    /// Snap lines for the monitor under the rectangle: both the work-area edges (which stop at the taskbar)
+    /// and the full screen edges. Where there's no taskbar the two are the same line.
+    /// </summary>
+    private (int[] X, int[] Y) SnapLines(RECT r)
+    {
+        var xs = new List<int>();
+        var ys = new List<int>();
+
+        // Ask Windows on every drag rather than using a cached screen list, so moving/resizing the taskbar,
+        // auto-hide, resolution or monitor changes are always reflected. Works for a taskbar on any side.
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (GetMonitorInfo(MonitorFromRect(ref r, MONITOR_DEFAULTTONEAREST), ref info))
+        {
+            RECT work = info.rcWork, full = info.rcMonitor;
+            xs.AddRange(new[] { work.Left, work.Right, full.Left, full.Right });
+            ys.AddRange(new[] { work.Top, work.Bottom, full.Top, full.Bottom });
+        }
+
+        // Other overlays' edges. Only use an overlay that's alongside this one on the other axis, so its
+        // edges act as neighbours (flush side by side, or lined up) rather than tugging from across the screen.
+        if (OtherOverlays != null)
+        {
+            int d = SnapDistance;
+            foreach (var o in OtherOverlays())
+            {
+                if (r.Top <= o.Bottom + d && r.Bottom >= o.Top - d) xs.AddRange(new[] { o.Left, o.Right });
+                if (r.Left <= o.Right + d && r.Right >= o.Left - d) ys.AddRange(new[] { o.Top, o.Bottom });
+            }
+        }
+
+        return (xs.ToArray(), ys.ToArray());
+    }
+
+    /// <summary>Offset that moves one of <paramref name="edges"/> onto the closest snap line within range, or 0.</summary>
+    private int SnapOffset(int[] edges, int[] lines)
+    {
+        int best = 0, bestDistance = int.MaxValue;
+        foreach (int edge in edges)
+        foreach (int line in lines)
+        {
+            int distance = Math.Abs(line - edge);
+            if (distance <= SnapDistance && distance < bestDistance)
+            {
+                best = line - edge;
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>Moves the whole rectangle so its nearest edge lines up with a nearby snap line.</summary>
+    private RECT SnapMove(RECT r)
+    {
+        var (xs, ys) = SnapLines(r);
+        int dx = SnapOffset(new[] { r.Left, r.Right }, xs);
+        int dy = SnapOffset(new[] { r.Top, r.Bottom }, ys);
+        return new RECT(r.Left + dx, r.Top + dy, r.Right + dx, r.Bottom + dy);
+    }
+
+    /// <summary>Snaps only the edges being dragged during a resize.</summary>
+    private RECT SnapSize(RECT r, int edge)
+    {
+        var (xs, ys) = SnapLines(r);
+        if (edge is WMSZ_LEFT or WMSZ_TOPLEFT or WMSZ_BOTTOMLEFT) r.Left += SnapOffset(new[] { r.Left }, xs);
+        if (edge is WMSZ_RIGHT or WMSZ_TOPRIGHT or WMSZ_BOTTOMRIGHT) r.Right += SnapOffset(new[] { r.Right }, xs);
+        if (edge is WMSZ_TOP or WMSZ_TOPLEFT or WMSZ_TOPRIGHT) r.Top += SnapOffset(new[] { r.Top }, ys);
+        if (edge is WMSZ_BOTTOM or WMSZ_BOTTOMLEFT or WMSZ_BOTTOMRIGHT) r.Bottom += SnapOffset(new[] { r.Bottom }, ys);
+        return r;
     }
 
     private int HitTest(Point p)

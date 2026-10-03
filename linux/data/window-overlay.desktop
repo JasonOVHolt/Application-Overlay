@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Window Overlay
+Comment=Mirror any window into an always-on-top, click-through overlay
+Exec=window-overlay
+Icon=window-overlay
+Terminal=false
+Categories=Utility;AudioVideo;
+StartupWMClass=window-overlay

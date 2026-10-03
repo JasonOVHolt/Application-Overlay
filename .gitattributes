@@ -1,0 +1,8 @@
+# Keep Unix line endings for files that run on Linux/macOS, even when committed from Windows.
+*.sh                    text eol=lf
+*.py                    text eol=lf
+*.swift                 text eol=lf
+*.plist                 text eol=lf
+*.desktop               text eol=lf
+linux/window-overlay    text eol=lf
+macos/Package.swift     text eol=lf

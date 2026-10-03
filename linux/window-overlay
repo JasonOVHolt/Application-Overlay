@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+# Runs Window Overlay from this folder without installing it.
+here="$(cd "$(dirname "$0")" && pwd)"
+PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m window_overlay "$@"
