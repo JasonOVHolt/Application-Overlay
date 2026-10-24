@@ -1,11 +1,11 @@
 """Main window: pick windows, manage overlays and their settings."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Dict, List, Optional, Tuple
 
 from gi.repository import Gdk, GdkPixbuf, GLib, Gst, Gtk, Pango
 
-from .overlay import Crop, OverlayWindow
+from .overlay import OverlayWindow
 from .settings import Settings
 from .x11 import CONTROL_MASK, MOD1_MASK, MOD4_MASK, SHIFT_MASK, X11, HotkeyGrabber, WindowInfo
 
@@ -30,6 +30,10 @@ button.suggested-action:hover { background-color: #68a0ff; }
 .dot-warning { color: #f5b43c; }
 entry.hotkey { font-weight: 600; }
 """
+
+# Each side can crop up to 98%; opposite sides are kept from overlapping (at least 2% stays visible).
+MAX_CROP_PERCENT = 98
+OPPOSITE_SIDE = {"Left": "Right", "Right": "Left", "Top": "Bottom", "Bottom": "Top"}
 
 X_MODIFIERS = {
     Gdk.ModifierType.CONTROL_MASK: CONTROL_MASK,
@@ -336,19 +340,34 @@ class MainWindow(Gtk.Window):
         self.crop_scales: Dict[str, Gtk.Scale] = {}
         for i, name in enumerate(("Left", "Right", "Top", "Bottom")):
             row_index, col = divmod(i, 2)
-            scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 45, 1)
+            scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, MAX_CROP_PERCENT, 1)
             scale.set_draw_value(False)
             scale.set_hexpand(True)
             value = _label("0%", "muted", "small", xalign=1.0)
             value.set_width_chars(4)
-            scale.connect("value-changed", lambda s, v=value: (v.set_text(f"{int(s.get_value())}%"),
-                                                                 self._apply_selected_settings()))
+            scale.connect("value-changed", lambda s, v=value: v.set_text(f"{int(s.get_value())}%"))
+            scale.connect("value-changed", lambda s, n=name: self._on_crop_scale_changed(n))
             grid.attach(_label(name, "muted"), col * 3, row_index, 1, 1)
             grid.attach(scale, col * 3 + 1, row_index, 1, 1)
             grid.attach(value, col * 3 + 2, row_index, 1, 1)
             self.crop_scales[name] = scale
         self.settings_body.pack_start(grid, False, False, 0)
         return card
+
+    def _on_crop_scale_changed(self, name: str):
+        """Applies one crop side. Only that side changes; opposite sides can't overlap."""
+        scale, opposite = self.crop_scales[name], self.crop_scales[OPPOSITE_SIDE[name]]
+        if self.loading_settings:
+            return
+        if scale.get_value() + opposite.get_value() > MAX_CROP_PERCENT:
+            scale.set_value(MAX_CROP_PERCENT - opposite.get_value())  # re-enters with the clamped value
+            return
+        entry = self.selected
+        if entry is None:
+            return
+        entry.window.set_crop(replace(entry.window.crop, **{name.lower(): scale.get_value() / 100}))
+        for row in self.overlay_list.get_children():
+            row.refresh()
 
     # ================================================================== window list
 
@@ -507,8 +526,6 @@ class MainWindow(Gtk.Window):
         entry.opacity = self.opacity_scale.get_value() / 100
         entry.window.set_overlay_opacity(entry.opacity)
         entry.window.set_client_area_only(self.client_only_switch.get_active())
-        s = {name: scale.get_value() / 100 for name, scale in self.crop_scales.items()}
-        entry.window.set_crop(Crop(s["Left"], s["Top"], s["Right"], s["Bottom"]))
         for row in self.overlay_list.get_children():
             row.refresh()
 

@@ -3,7 +3,7 @@ using static OverlayApp.NativeMethods;
 
 namespace OverlayApp;
 
-/// <summary>Crop amounts as fractions (0..0.45) of the source width/height.</summary>
+/// <summary>Crop amounts as fractions (0..1) of the source width/height. Left+Right and Top+Bottom stay below 1.</summary>
 internal readonly record struct Crop(double Left, double Top, double Right, double Bottom);
 
 /// <summary>
@@ -134,6 +134,7 @@ internal sealed class OverlayForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        MinimumSize = new Size(this.S(80), this.S(50)); // DeviceDpi is now the monitor's, not the system default
         ApplyLayeredAttributes();
         RegisterThumbnail();
         _watchTimer.Start();
@@ -376,6 +377,9 @@ internal sealed class OverlayForm : Form
         DwmUnregisterThumbnail(_thumb);
         _thumb = IntPtr.Zero;
     }
+
+    /// <summary>Size in pixels of what's being mirrored (client area or whole window), before cropping.</summary>
+    public Size SourceSize => GetSourceSize();
 
     private Size GetSourceSize()
     {

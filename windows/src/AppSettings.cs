@@ -10,6 +10,12 @@ internal sealed class AppSettings
     /// <summary>Overlays snap flush to monitor edges when dragged or resized near them.</summary>
     public bool SnapToEdges { get; set; }
 
+    /// <summary>Ask GitHub for a newer release when the app starts.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
+    /// <summary>Release tag the user chose to skip; startup checks don't mention it again.</summary>
+    public string? SkippedUpdateTag { get; set; }
+
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OverlayApp", "settings.json");
 

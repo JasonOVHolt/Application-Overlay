@@ -195,7 +195,7 @@ struct ContentView: View {
     private func cropSlider(_ name: String, _ side: WritableKeyPath<Crop, Double>) -> some View {
         let binding = model.cropBinding(side)
         Text(name).foregroundStyle(.secondary).frame(width: 46, alignment: .leading)
-        Slider(value: binding, in: 0...0.45)
+        Slider(value: binding, in: 0...AppModel.maxCrop)
         Text("\(Int((binding.wrappedValue * 100).rounded()))%").font(.caption).monospacedDigit()
             .frame(width: 34, alignment: .trailing)
     }

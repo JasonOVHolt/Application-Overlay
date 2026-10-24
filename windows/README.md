@@ -24,6 +24,27 @@ The compositor draws the source window's live image on the GPU. That means:
 - **The overlay shows the image only.** Clicks and keys never reach the source window through it. To control the source,
   interact with the source window itself.
 
+## Updates
+- **Startup check:** when the app starts, it asks GitHub for the latest release of
+  [JasonOVHolt/Application-Overlay](https://github.com/JasonOVHolt/Application-Overlay/releases). The check uses
+  GitHub's public API and runs in the background, so it never delays startup.
+- **Update banner:** if the release is newer, a banner offers **Download** (opens the release page), **Skip this version**,
+  or ✕ to hide it until next time.
+- **Manual check:** **Check for updates** at the top right checks right away and always reports the result, including
+  versions you skipped.
+- **Turning it off:** switch off **Check for updates on startup** if you don't want the app to contact GitHub. The current
+  version is shown next to the button.
+
+### Publishing a release
+The app compares its own `<Version>` (in `src/OverlayApp.csproj`) with the newest release's tag. The tag can be written
+`V2.1`, `v2.1.0` or just `2.1`; drafts and pre-releases are ignored. To release:
+1. Bump `<Version>` in `src/OverlayApp.csproj` (e.g. `2.1` → `2.2`).
+2. Build the standalone exe (see below).
+3. On GitHub, create a release tagged with that version (e.g. `V2.2`) and attach `dist\OverlayApp.exe`.
+
+Everyone running an older version sees the banner the next time they start the app. The repository it checks is
+`<UpdateRepository>` in the same file.
+
 ## Build & run
 Requires Windows 10 or 11 and the .NET 8 SDK. Run these commands from this `windows` folder.
 ```
@@ -45,6 +66,10 @@ dotnet publish src -c Release -r win-x64 --self-contained true -p:PublishSingleF
    the very bottom of the screen, whichever is closer. They also snap to each other: flush side by side, and with their edges
    lined up when they're next to each other. This setting is remembered.
 3. **Overlay settings** apply to the selected overlay: opacity, a "client area only" setting that hides the title bar, and crop per side.
+   Each side can crop up to 98%. Opposite sides can't overlap: at least 2% always stays visible.
+   For a precise area, such as a small corner, press **Select area**. It shows the whole source live. Drag a rectangle around
+   the part you want, move or resize it by its edges and corners, and use the arrow keys to nudge it one pixel at a time
+   (Shift+arrows resize). The overlay updates as you drag. **Apply** or Enter keeps it; **Cancel** or Esc puts it back.
    Use the buttons in the card header to fit the overlay to its source's shape or to close it. You can also close an overlay with the ✕ in
    the list or the Delete key.
 4. Turn on **Overlay mode** or press the toggle hotkey from any app (default **Ctrl+Alt+O**). This locks **all** overlays and makes them

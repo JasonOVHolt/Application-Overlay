@@ -42,9 +42,43 @@ internal static class Theme
     public const string GlyphReset = "";
     public const string GlyphAdd = "";
     public const string GlyphDelete = "";
+    public const string GlyphCrop = "";
+    public const string GlyphDownload = "";
+    public const string GlyphClose = "";
+    public const string GlyphSync = "";
 
-    /// <summary>Scales a 96-DPI pixel value to the control's current DPI.</summary>
+    // ---- DPI ----------------------------------------------------------------------------------
+    // Layout is written in 96-DPI ("100%") units and forms use AutoScaleMode.Dpi, so WinForms scales
+    // bounds when a window opens on, or moves to, a monitor with other scaling. WinForms also rescales
+    // each control's own Font. Two things are left to us: values computed while painting (use S), and
+    // any extra font a control draws with besides its own Font (use Scaled).
+
+    /// <summary>Scales a 96-DPI pixel value to the control's current DPI. For paint-time and runtime values only.</summary>
     public static int S(this Control c, int value) => (int)Math.Round(value * c.DeviceDpi / 96.0);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForSystem();
+
+    /// <summary>DPI that GDI uses to turn font points into pixels in this process (the primary monitor's at sign-in).</summary>
+    public static readonly int SystemDpi = (int)GetDpiForSystem();
+
+    private static readonly Dictionary<(Font Font, int Dpi), Font> ScaledFonts = new();
+
+    /// <summary>
+    /// <paramref name="font"/> sized for the control's current monitor, matching how WinForms rescales a
+    /// control's own Font (points are rendered at <see cref="SystemDpi"/>).
+    /// </summary>
+    public static Font Scaled(this Control c, Font font)
+    {
+        int dpi = c.DeviceDpi;
+        if (dpi == SystemDpi) return font;
+        if (!ScaledFonts.TryGetValue((font, dpi), out var scaled))
+        {
+            scaled = new Font(font.FontFamily, font.SizeInPoints * dpi / SystemDpi, font.Style, GraphicsUnit.Point);
+            ScaledFonts[(font, dpi)] = scaled;
+        }
+        return scaled;
+    }
 
     public static GraphicsPath RoundedRect(RectangleF r, float radius)
     {

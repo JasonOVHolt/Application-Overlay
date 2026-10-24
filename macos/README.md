@@ -35,7 +35,8 @@ The build is signed ad hoc, not with an Apple Developer ID. Because of that:
 - **Add overlays:** select a window and press **Add overlay**, or double-click it or press Return. Add the same window
   again to show another cropped part of it.
 - **Move and resize:** while unlocked, drag an overlay to move it and drag its edges to resize. Clicking one selects it.
-- **Overlay settings:** apply to the selected overlay: opacity and crop for each side.
+- **Overlay settings:** apply to the selected overlay: opacity and crop for each side (up to 98%; opposite sides
+  can't overlap). The Windows version also has a drag-to-select "Select area" picker; it isn't on macOS yet.
 - **Overlay mode:** the switch, or the global hotkey (default **⌃⌥O**), locks every overlay and makes them all click-through.
   Click the hotkey button and press a new combination to change it. Esc cancels and Delete clears it.
 - **Snap to edges:** overlays snap to the menu bar, the Dock edge, the real screen edges, and each other.

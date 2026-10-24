@@ -10,6 +10,15 @@
     <AssemblyName>OverlayApp</AssemblyName>
     <RootNamespace>OverlayApp</RootNamespace>
     <ApplicationIcon>../assets/app.ico</ApplicationIcon>
+
+    <!-- Bump this for each release and tag the GitHub release to match, e.g. Version 2.2 -> tag V2.2. -->
+    <Version>2.1</Version>
+    <!-- GitHub repository (owner/name) whose latest release the app checks for updates. -->
+    <UpdateRepository>JasonOVHolt/Application-Overlay</UpdateRepository>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="UpdateRepository" Value="$(UpdateRepository)" />
+  </ItemGroup>
 
 </Project>

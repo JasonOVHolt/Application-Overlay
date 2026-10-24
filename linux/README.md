@@ -37,7 +37,8 @@ python3 -m unittest discover -s tests
 - **Add overlays:** select a window and press **Add overlay**, or double-click it or press Enter. Add the same window
   again to show another cropped part of it.
 - **Move and resize:** while unlocked, drag an overlay to move it and drag its edges to resize. Clicking one selects it.
-- **Overlay settings:** apply to the selected overlay: opacity, client area only, and crop for each side.
+- **Overlay settings:** apply to the selected overlay: opacity, client area only, and crop for each side (up to 98%;
+  opposite sides can't overlap). The Windows version also has a drag-to-select "Select area" picker; it isn't on Linux yet.
 - **Overlay mode:** the switch, or the global hotkey (default **Ctrl+Alt+O**), locks every overlay and makes them all
   click-through. Click the hotkey box and press a new combination to change it. Esc cancels and Backspace clears it.
 - **Snap to edges:** overlays snap to panel/dock edges, the real screen edges, and each other. The setting is remembered.

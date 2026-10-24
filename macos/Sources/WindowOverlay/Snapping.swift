@@ -9,7 +9,7 @@ struct ResizeEdges: OptionSet {
     static let bottom = ResizeEdges(rawValue: 8)
 }
 
-/// Crop amounts as fractions (0...0.45) of the source size.
+/// Crop amounts as fractions (0...1) of the source size. Left+right and top+bottom stay below 1.
 struct Crop: Equatable {
     var left = 0.0
     var top = 0.0

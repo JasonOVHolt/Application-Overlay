@@ -6,16 +6,18 @@ namespace OverlayApp;
 internal abstract class RowListBox : ListBox
 {
     private int _hoverIndex = -1;
+    private readonly int _logicalItemHeight; // 96-DPI units
 
     protected RowListBox(int itemHeight)
     {
+        _logicalItemHeight = itemHeight;
         DrawMode = DrawMode.OwnerDrawFixed;
         BorderStyle = BorderStyle.None;
         IntegralHeight = false;
         BackColor = Theme.Surface;
         ForeColor = Theme.Text;
         Font = Theme.Body;
-        ItemHeight = Math.Min(255, this.S(itemHeight));
+        ItemHeight = itemHeight;
     }
 
     protected int HoverIndex => _hoverIndex;
@@ -25,7 +27,17 @@ internal abstract class RowListBox : ListBox
     {
         base.OnHandleCreated(e);
         Theme.UseDarkScrollbars(Handle);
+        ApplyItemHeight();
     }
+
+    // WinForms scales fonts and bounds for a new monitor's DPI, but not a ListBox's item height.
+    protected override void RescaleConstantsForDpi(int deviceDpiOld, int deviceDpiNew)
+    {
+        base.RescaleConstantsForDpi(deviceDpiOld, deviceDpiNew);
+        ApplyItemHeight();
+    }
+
+    private void ApplyItemHeight() => ItemHeight = Math.Min(255, this.S(_logicalItemHeight));
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
@@ -135,18 +147,18 @@ internal abstract class RowListBox : ListBox
         }
         else
         {
-            TextRenderer.DrawText(g, Theme.GlyphApp, Theme.IconLarge, iconRect, Theme.TextMuted,
+            TextRenderer.DrawText(g, Theme.GlyphApp, this.Scaled(Theme.IconLarge), iconRect, Theme.TextMuted,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.PreserveGraphicsTranslateTransform);
         }
 
         int textLeft = iconRect.Right + this.S(12);
         int right = (int)r.Right - this.S(12) - rightReserve;
         var flags = TextFormatFlags.NoPadding | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix;
-        int titleH = TextRenderer.MeasureText("Ag", Theme.BodyStrong).Height;
-        int subH = TextRenderer.MeasureText("Ag", Theme.Small).Height;
+        int titleH = TextRenderer.MeasureText("Ag", this.Scaled(Theme.BodyStrong)).Height;
+        int subH = TextRenderer.MeasureText("Ag", this.Scaled(Theme.Small)).Height;
         int y = (int)(r.Y + (r.Height - titleH - subH) / 2);
-        TextRenderer.DrawText(g, title, Theme.BodyStrong, new Rectangle(textLeft, y, right - textLeft, titleH), Theme.Text, flags);
-        TextRenderer.DrawText(g, subtitle, Theme.Small, new Rectangle(textLeft, y + titleH, right - textLeft, subH), Theme.TextMuted, flags);
+        TextRenderer.DrawText(g, title, this.Scaled(Theme.BodyStrong), new Rectangle(textLeft, y, right - textLeft, titleH), Theme.Text, flags);
+        TextRenderer.DrawText(g, subtitle, this.Scaled(Theme.Small), new Rectangle(textLeft, y + titleH, right - textLeft, subH), Theme.TextMuted, flags);
         return r;
     }
 }
@@ -175,7 +187,7 @@ internal sealed class WindowListBox : RowListBox
 
         _liveCounts.TryGetValue(w.Handle, out int count);
         string badgeText = count > 1 ? $"LIVE ×{count}" : "LIVE";
-        var badgeSize = TextRenderer.MeasureText(badgeText, Theme.Small);
+        var badgeSize = TextRenderer.MeasureText(badgeText, this.Scaled(Theme.Small));
         int reserve = count > 0 ? badgeSize.Width + this.S(20) : 0;
 
         var r = DrawRow(e, w.Icon, w.Title, w.ProcessName, reserve, this.S(24));
@@ -187,7 +199,7 @@ internal sealed class WindowListBox : RowListBox
             var badge = new RectangleF(right - badgeSize.Width - this.S(12), r.Y + (r.Height - this.S(20)) / 2,
                 badgeSize.Width + this.S(12), this.S(20));
             Theme.FillRounded(g, Color.FromArgb(40, Theme.Success), badge, badge.Height / 2);
-            TextRenderer.DrawText(g, badgeText, Theme.Small, Rectangle.Round(badge), Theme.Success,
+            TextRenderer.DrawText(g, badgeText, this.Scaled(Theme.Small), Rectangle.Round(badge), Theme.Success,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.PreserveGraphicsTranslateTransform);
         }
     }
@@ -255,7 +267,7 @@ internal sealed class OverlayListBox : RowListBox
                 using var hover = new SolidBrush(Color.FromArgb(90, Theme.Danger));
                 g.FillEllipse(hover, close);
             }
-            TextRenderer.DrawText(g, GlyphClose, Theme.IconSmall, close, overClose ? Color.White : Theme.TextMuted,
+            TextRenderer.DrawText(g, GlyphClose, this.Scaled(Theme.IconSmall), close, overClose ? Color.White : Theme.TextMuted,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.PreserveGraphicsTranslateTransform);
         }
     }

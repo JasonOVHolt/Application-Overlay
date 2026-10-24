@@ -202,9 +202,19 @@ final class AppModel: ObservableObject {
                 set: { value in self.updateSelected { $0.opacity = value } })
     }
 
+    /// Each side can crop up to 98%; opposite sides are kept from overlapping (at least 2% stays visible).
+    static let maxCrop = 0.98
+
     func cropBinding(_ side: WritableKeyPath<Crop, Double>) -> Binding<Double> {
-        Binding(get: { self.selectedOverlay?.crop[keyPath: side] ?? 0 },
-                set: { value in self.updateSelected { $0.crop[keyPath: side] = value } })
+        let opposite: WritableKeyPath<Crop, Double> =
+            side == \Crop.left ? \.right : side == \Crop.right ? \.left : side == \Crop.top ? \.bottom : \.top
+        return Binding(
+            get: { self.selectedOverlay?.crop[keyPath: side] ?? 0 },
+            set: { value in
+                self.updateSelected { item in
+                    item.crop[keyPath: side] = min(value, Self.maxCrop - item.crop[keyPath: opposite])
+                }
+            })
     }
 
     func resetCrop() { updateSelected { $0.crop = Crop() } }

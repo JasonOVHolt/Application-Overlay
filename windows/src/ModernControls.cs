@@ -36,8 +36,10 @@ internal sealed class Card : Panel
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
                | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         BackColor = Theme.Surface;
-        Padding = new Padding(this.S(16), this.S(14), this.S(16), this.S(14));
+        Padding = new Padding(16, 14, 16, 14); // 96-DPI units; AutoScaleMode.Dpi scales it
     }
+
+    public Color BorderColor { get; set; } = Theme.Border;
 
     protected override void OnPaintBackground(PaintEventArgs e)
     {
@@ -46,7 +48,7 @@ internal sealed class Card : Panel
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
         Theme.FillRounded(g, Theme.Surface, r, this.S(10));
-        Theme.DrawRounded(g, Theme.Border, r, this.S(10));
+        Theme.DrawRounded(g, BorderColor, r, this.S(10));
     }
 }
 
@@ -67,18 +69,22 @@ internal sealed class ModernButton : DrawnControl
         _glyph = glyph;
         Font = Theme.BodyStrong;
         Cursor = Cursors.Hand;
-        Height = this.S(36);
+        Height = 36; // 96-DPI units
     }
 
     public ButtonKind Kind { get => _kind; set { _kind = value; Invalidate(); } }
     public string? Glyph { get => _glyph; set { _glyph = value; Invalidate(); } }
 
+    /// <summary><see cref="PreferredWidth"/> in 96-DPI units, for building layouts that AutoScaleMode.Dpi then scales.</summary>
+    public int LogicalPreferredWidth => (int)Math.Ceiling(PreferredWidth * 96.0 / DeviceDpi);
+
+    /// <summary>Width that fits the glyph and text, in current pixels.</summary>
     public int PreferredWidth
     {
         get
         {
             int w = this.S(28);
-            if (_glyph != null) w += TextRenderer.MeasureText(_glyph, Theme.Icon).Width;
+            if (_glyph != null) w += TextRenderer.MeasureText(_glyph, this.Scaled(Theme.Icon)).Width;
             if (!string.IsNullOrEmpty(Text)) w += TextRenderer.MeasureText(Text, Font).Width;
             return w;
         }
@@ -124,14 +130,14 @@ internal sealed class ModernButton : DrawnControl
         // Glyph + text, centred together.
         var flags = TextFormatFlags.NoPadding | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine;
         int gap = this.S(8);
-        Size glyphSize = _glyph != null ? TextRenderer.MeasureText(g, _glyph, Theme.Icon, Size.Empty, flags) : Size.Empty;
+        Size glyphSize = _glyph != null ? TextRenderer.MeasureText(g, _glyph, this.Scaled(Theme.Icon), Size.Empty, flags) : Size.Empty;
         Size textSize = string.IsNullOrEmpty(Text) ? Size.Empty : TextRenderer.MeasureText(g, Text, Font, Size.Empty, flags);
         int total = glyphSize.Width + textSize.Width + (glyphSize.Width > 0 && textSize.Width > 0 ? gap : 0);
         int x = (Width - total) / 2;
 
         if (_glyph != null)
         {
-            TextRenderer.DrawText(g, _glyph, Theme.Icon, new Rectangle(x, 0, glyphSize.Width, Height), fg, flags);
+            TextRenderer.DrawText(g, _glyph, this.Scaled(Theme.Icon), new Rectangle(x, 0, glyphSize.Width, Height), fg, flags);
             x += glyphSize.Width + gap;
         }
         if (textSize.Width > 0)
@@ -155,7 +161,7 @@ internal sealed class ToggleSwitch : DrawnControl
         Text = text;
         Description = description;
         Cursor = Cursors.Hand;
-        Height = this.S(description == null ? 30 : 44);
+        Height = description == null ? 30 : 44; // 96-DPI units
         _anim.Tick += (_, _) =>
         {
             float target = _checked ? 1f : 0f;
@@ -215,15 +221,15 @@ internal sealed class ToggleSwitch : DrawnControl
         Color textColor = Enabled ? Theme.Text : Theme.TextMuted;
         if (Description == null)
         {
-            TextRenderer.DrawText(g, Text, Theme.Body, textArea, textColor, flags | TextFormatFlags.VerticalCenter);
+            TextRenderer.DrawText(g, Text, this.Scaled(Theme.Body), textArea, textColor, flags | TextFormatFlags.VerticalCenter);
         }
         else
         {
-            int titleH = TextRenderer.MeasureText(Text, Theme.Body).Height;
-            int descH = TextRenderer.MeasureText(Description, Theme.Small).Height;
+            int titleH = TextRenderer.MeasureText(Text, this.Scaled(Theme.Body)).Height;
+            int descH = TextRenderer.MeasureText(Description, this.Scaled(Theme.Small)).Height;
             int y = (Height - titleH - descH) / 2;
-            TextRenderer.DrawText(g, Text, Theme.Body, new Rectangle(0, y, textArea.Width, titleH), textColor, flags);
-            TextRenderer.DrawText(g, Description, Theme.Small, new Rectangle(0, y + titleH, textArea.Width, descH), Theme.TextMuted, flags);
+            TextRenderer.DrawText(g, Text, this.Scaled(Theme.Body), new Rectangle(0, y, textArea.Width, titleH), textColor, flags);
+            TextRenderer.DrawText(g, Description, this.Scaled(Theme.Small), new Rectangle(0, y + titleH, textArea.Width, descH), Theme.TextMuted, flags);
         }
     }
 }
@@ -243,7 +249,7 @@ internal sealed class Slider : DrawnControl
         _max = max;
         _value = Math.Clamp(value, min, max);
         Cursor = Cursors.Hand;
-        Height = this.S(26);
+        Height = 26; // 96-DPI units
     }
 
     public int Value
@@ -350,7 +356,7 @@ internal sealed class TextHost : Panel
         Box = box;
         _glyph = glyph;
         BackColor = Theme.Surface;
-        Height = this.S(34);
+        Height = 34; // 96-DPI units
         Cursor = Cursors.IBeam;
 
         box.BorderStyle = BorderStyle.None;
@@ -383,7 +389,7 @@ internal sealed class TextHost : Panel
 
         if (_glyph != null)
         {
-            TextRenderer.DrawText(g, _glyph, Theme.Icon, new Rectangle(this.S(10), 0, this.S(20), Height),
+            TextRenderer.DrawText(g, _glyph, this.Scaled(Theme.Icon), new Rectangle(this.S(10), 0, this.S(20), Height),
                 Theme.TextMuted, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }
     }
@@ -399,7 +405,7 @@ internal sealed class StatusBar : DrawnControl
     public StatusBar()
     {
         BackColor = Theme.Background;
-        Height = this.S(28);
+        Height = 28; // 96-DPI units
     }
 
     public void Set(string text, StatusKind kind)
@@ -430,7 +436,98 @@ internal sealed class StatusBar : DrawnControl
         using (var b = new SolidBrush(dot)) g.FillEllipse(b, 2, cy - d / 2, d, d);
 
         var textRect = new Rectangle((int)(d + this.S(10)), 0, Width - (int)d - this.S(10), Height);
-        TextRenderer.DrawText(g, Text, Theme.Body, textRect, _kind == StatusKind.Idle ? Theme.TextMuted : Theme.Text,
+        TextRenderer.DrawText(g, Text, this.Scaled(Theme.Body), textRect, _kind == StatusKind.Idle ? Theme.TextMuted : Theme.Text,
             TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+    }
+}
+
+/// <summary>
+/// One row: an item on the left, a square button on the right, and a middle item filling the space
+/// between. Laid out by hand rather than with a TableLayoutPanel, whose auto-sized columns drift each
+/// time WinForms rescales the window for a monitor with different scaling.
+/// </summary>
+internal sealed class ToolbarRow : Panel
+{
+    private readonly Control _left, _fill, _right;
+    private readonly int _leftGap, _rightGap; // 96-DPI units
+
+    public ToolbarRow(Control left, Control fill, Control right, int leftGap, int rightGap)
+    {
+        _left = left;
+        _fill = fill;
+        _right = right;
+        _leftGap = leftGap;
+        _rightGap = rightGap;
+        BackColor = Theme.Surface;
+        Controls.AddRange(new[] { left, fill, right });
+    }
+
+    // Report our own height so an auto-sized table row fits us exactly.
+    public override Size GetPreferredSize(Size proposedSize) => new(Width, Height);
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        base.OnLayout(levent);
+        int h = ClientSize.Height;
+        var leftSize = _left.GetPreferredSize(Size.Empty);
+        _left.SetBounds(0, (h - leftSize.Height) / 2, leftSize.Width, leftSize.Height);
+        _right.SetBounds(ClientSize.Width - h, 0, h, h);
+        int x = _left.Right + this.S(_leftGap), right = _right.Left - this.S(_rightGap);
+        _fill.SetBounds(x, 0, Math.Max(0, right - x), h);
+    }
+}
+
+/// <summary>
+/// Stacks its children top to bottom at full width, scrolling vertically only (a vertical scrollbar
+/// never forces a horizontal one). Laid out by hand so it stays right across monitor scaling changes.
+/// </summary>
+internal sealed class CardStack : Panel
+{
+    private readonly int _gap; // 96-DPI units
+    private bool _arranging;
+
+    public CardStack(int gap)
+    {
+        _gap = gap;
+        AutoScroll = true;
+        BackColor = Theme.Background;
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        Theme.UseDarkScrollbars(Handle);
+    }
+
+    protected override void OnLayout(LayoutEventArgs levent)
+    {
+        if (!_arranging)
+        {
+            _arranging = true;
+            try
+            {
+                int gap = this.S(_gap), total = -gap;
+                foreach (Control child in Controls) total += child.Height + gap;
+
+                // Decide up front whether a vertical scrollbar is needed and leave room for it. Sizing the
+                // cards to the current client width instead lags one step behind the scrollbar appearing,
+                // which made a horizontal scrollbar show up too.
+                bool needsVertical = total > Height;
+                int width = Width - (needsVertical ? SystemInformation.GetVerticalScrollBarWidthForDpi(DeviceDpi) : 0);
+
+                int y = AutoScrollPosition.Y;
+                foreach (Control child in Controls)
+                {
+                    child.SetBounds(0, y, width, child.Height);
+                    y += child.Height + gap;
+                }
+                AutoScrollMinSize = new Size(0, Math.Max(0, total));
+            }
+            finally
+            {
+                _arranging = false;
+            }
+        }
+        base.OnLayout(levent);
     }
 }
