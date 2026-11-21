@@ -26,7 +26,7 @@ internal abstract class RowListBox : ListBox
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        Theme.UseDarkScrollbars(Handle);
+        Theme.ApplyScrollbars(Handle);
         ApplyItemHeight();
     }
 
@@ -119,7 +119,10 @@ internal abstract class RowListBox : ListBox
     }
 
     /// <summary>Draws the row background, icon, title and subtitle. Returns the row's inner rect.</summary>
-    protected RectangleF DrawRow(DrawItemEventArgs e, Bitmap? icon, string title, string subtitle, int rightReserve, int iconSize)
+    /// <param name="dimmed">Draws the icon and title faded, e.g. for a hidden overlay.</param>
+    /// <param name="glyph">Icon glyph to show when there is no <paramref name="icon"/> bitmap.</param>
+    protected RectangleF DrawRow(DrawItemEventArgs e, Bitmap? icon, string title, string subtitle, int rightReserve, int iconSize,
+        bool dimmed = false, string? glyph = null)
     {
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -143,11 +146,20 @@ internal abstract class RowListBox : ListBox
         if (icon != null)
         {
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-            g.DrawImage(icon, iconRect);
+            if (dimmed)
+            {
+                using var faded = new System.Drawing.Imaging.ImageAttributes();
+                faded.SetColorMatrix(new System.Drawing.Imaging.ColorMatrix { Matrix33 = 0.35f });
+                g.DrawImage(icon, iconRect, 0, 0, icon.Width, icon.Height, GraphicsUnit.Pixel, faded);
+            }
+            else
+            {
+                g.DrawImage(icon, iconRect);
+            }
         }
         else
         {
-            TextRenderer.DrawText(g, Theme.GlyphApp, this.Scaled(Theme.IconLarge), iconRect, Theme.TextMuted,
+            TextRenderer.DrawText(g, glyph ?? Theme.GlyphApp, this.Scaled(Theme.IconLarge), iconRect, Theme.TextMuted,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.PreserveGraphicsTranslateTransform);
         }
 
@@ -157,7 +169,8 @@ internal abstract class RowListBox : ListBox
         int titleH = TextRenderer.MeasureText("Ag", this.Scaled(Theme.BodyStrong)).Height;
         int subH = TextRenderer.MeasureText("Ag", this.Scaled(Theme.Small)).Height;
         int y = (int)(r.Y + (r.Height - titleH - subH) / 2);
-        TextRenderer.DrawText(g, title, this.Scaled(Theme.BodyStrong), new Rectangle(textLeft, y, right - textLeft, titleH), Theme.Text, flags);
+        TextRenderer.DrawText(g, title, this.Scaled(Theme.BodyStrong), new Rectangle(textLeft, y, right - textLeft, titleH),
+            dimmed ? Theme.TextMuted : Theme.Text, flags);
         TextRenderer.DrawText(g, subtitle, this.Scaled(Theme.Small), new Rectangle(textLeft, y + titleH, right - textLeft, subH), Theme.TextMuted, flags);
         return r;
     }
@@ -205,14 +218,20 @@ internal sealed class WindowListBox : RowListBox
     }
 }
 
-/// <summary>List of running overlays, each with a close button.</summary>
+/// <summary>List of running overlays, each with a hide/show (eye) button and a close button.</summary>
 internal sealed class OverlayListBox : RowListBox
 {
     private const int WM_LBUTTONDOWN = 0x0201;
     private const int WM_LBUTTONDBLCLK = 0x0203;
-    private const string GlyphClose = "";
+    private const TextFormatFlags GlyphFlags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter
+        | TextFormatFlags.NoPadding | TextFormatFlags.PreserveGraphicsTranslateTransform;
 
     public event EventHandler<OverlayItem>? RemoveRequested;
+    public event EventHandler<OverlayItem>? VisibilityToggleRequested;
+    public event EventHandler<OverlayItem>? LockToggleRequested;
+
+    /// <summary>Right-click (or the menu key) on a row: show that overlay's menu at this screen point.</summary>
+    public event EventHandler<OverlayMenuRequest>? ContextMenuRequested;
 
     public OverlayListBox() : base(44) { }
 
@@ -223,24 +242,74 @@ internal sealed class OverlayListBox : RowListBox
         return new Rectangle(b.Right - s - this.S(10), b.Y + (b.Height - s) / 2, s, s);
     }
 
+    private Rectangle EyeRect(int index)
+    {
+        var close = CloseRect(index);
+        return new Rectangle(close.X - close.Width - this.S(4), close.Y, close.Width, close.Height);
+    }
+
+    private Rectangle LockRect(int index)
+    {
+        var eye = EyeRect(index);
+        return new Rectangle(eye.X - eye.Width - this.S(4), eye.Y, eye.Width, eye.Height);
+    }
+
     protected override bool HoverPartChanged(int index, Point from, Point to)
     {
         var close = CloseRect(index);
-        return close.Contains(from) != close.Contains(to);
+        var eye = EyeRect(index);
+        var lockRect = LockRect(index);
+        return close.Contains(from) != close.Contains(to) || eye.Contains(from) != eye.Contains(to)
+            || lockRect.Contains(from) != lockRect.Contains(to);
     }
 
     protected override void WndProc(ref Message m)
     {
-        // Handle the close button before the list treats the click as a selection.
+        const int WM_CONTEXTMENU = 0x007B;
+        if (m.Msg == WM_CONTEXTMENU && ContextMenuRequested != null)
+        {
+            long lp = m.LParam.ToInt64();
+            int index;
+            Point screen;
+            if (lp == -1) // menu key / Shift+F10: the selected row
+            {
+                index = SelectedIndex;
+                if (index < 0) return;
+                var row = GetItemRectangle(index);
+                screen = PointToScreen(new Point(row.X + this.S(40), row.Bottom));
+            }
+            else
+            {
+                screen = new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF));
+                index = IndexFromPoint(PointToClient(screen));
+            }
+            if (index >= 0 && index < Items.Count && Items[index] is OverlayItem target)
+                ContextMenuRequested(this, new OverlayMenuRequest(target, screen));
+            return;
+        }
+        // Handle the row's buttons before the list treats the click as a selection.
         if (m.Msg is WM_LBUTTONDOWN or WM_LBUTTONDBLCLK)
         {
             long lp = m.LParam.ToInt64();
             var pt = new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF));
             int index = IndexFromPoint(pt);
-            if (index >= 0 && CloseRect(index).Contains(pt) && Items[index] is OverlayItem item)
+            if (index >= 0 && Items[index] is OverlayItem item)
             {
-                RemoveRequested?.Invoke(this, item);
-                return;
+                if (CloseRect(index).Contains(pt))
+                {
+                    RemoveRequested?.Invoke(this, item);
+                    return;
+                }
+                if (EyeRect(index).Contains(pt))
+                {
+                    VisibilityToggleRequested?.Invoke(this, item);
+                    return;
+                }
+                if (LockRect(index).Contains(pt))
+                {
+                    LockToggleRequested?.Invoke(this, item);
+                    return;
+                }
             }
         }
         base.WndProc(ref m);
@@ -254,12 +323,53 @@ internal sealed class OverlayListBox : RowListBox
             return;
         }
 
-        DrawRow(e, item.Icon, item.Title, item.Summary, this.S(30), this.S(20));
+        DrawRow(e, item.Icon, item.Title, item.Summary, this.S(92), this.S(20), dimmed: item.Hidden);
 
+        var g = e.Graphics;
         bool selected = (e.State & DrawItemState.Selected) != 0;
-        if (selected || e.Index == HoverIndex)
+        bool active = selected || e.Index == HoverIndex;
+
+        // The eye stays visible while the overlay is hidden, so that state is always obvious.
+        if (active || item.Hidden)
         {
-            var g = e.Graphics;
+            var eye = EyeRect(e.Index);
+            bool overEye = eye.Contains(MousePos);
+            Color background = overEye ? Theme.Border
+                : selected ? Theme.Blend(BackColor, Theme.Accent, 48 / 255f)
+                : e.Index == HoverIndex ? Theme.SurfaceHover
+                : BackColor;
+            if (overEye)
+            {
+                using var hover = new SolidBrush(background);
+                g.FillEllipse(hover, eye);
+            }
+            Color color = overEye ? Theme.Text : item.Hidden ? Theme.Warning : Theme.TextMuted;
+            TextRenderer.DrawText(g, Theme.GlyphView, this.Scaled(Theme.Icon), eye, color, GlyphFlags);
+            if (item.Hidden)
+            {
+                float side = eye.Width * 0.5f;
+                var box = new RectangleF(eye.X + (eye.Width - side) / 2, eye.Y + (eye.Height - side) / 2, side, side);
+                Theme.DrawSlash(g, box, color, background, Math.Max(1f, this.S(3) / 2f));
+            }
+        }
+
+        // Lock: always shown while locked (accent), otherwise on hover/selection as an open padlock.
+        bool locked = item.Form.ClickThrough;
+        if (active || locked)
+        {
+            var lockRect = LockRect(e.Index);
+            bool overLock = lockRect.Contains(MousePos);
+            if (overLock)
+            {
+                using var hover = new SolidBrush(Theme.Border);
+                g.FillEllipse(hover, lockRect);
+            }
+            Color color = overLock ? Theme.Text : locked ? Theme.Accent : Theme.TextMuted;
+            TextRenderer.DrawText(g, locked ? Theme.GlyphLock : Theme.GlyphUnlock, this.Scaled(Theme.Icon), lockRect, color, GlyphFlags);
+        }
+
+        if (active)
+        {
             var close = CloseRect(e.Index);
             bool overClose = close.Contains(MousePos);
             if (overClose)
@@ -267,8 +377,103 @@ internal sealed class OverlayListBox : RowListBox
                 using var hover = new SolidBrush(Color.FromArgb(90, Theme.Danger));
                 g.FillEllipse(hover, close);
             }
-            TextRenderer.DrawText(g, GlyphClose, this.Scaled(Theme.IconSmall), close, overClose ? Color.White : Theme.TextMuted,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.PreserveGraphicsTranslateTransform);
+            TextRenderer.DrawText(g, Theme.GlyphClose, this.Scaled(Theme.IconSmall), close,
+                overClose ? Color.White : Theme.TextMuted, GlyphFlags);
         }
     }
 }
+
+/// <summary>Saved presets, each with Apply, Rename and Delete buttons (shown on hover or selection).</summary>
+internal sealed class PresetListBox : RowListBox
+{
+    private const int WM_LBUTTONDOWN = 0x0201;
+    private const int WM_LBUTTONDBLCLK = 0x0203;
+    private const TextFormatFlags GlyphFlags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter
+        | TextFormatFlags.NoPadding | TextFormatFlags.PreserveGraphicsTranslateTransform;
+
+    private enum RowButton { Delete, Rename, Apply } // right to left
+
+    public event EventHandler<OverlayPreset>? ApplyRequested;
+    public event EventHandler<OverlayPreset>? RenameRequested;
+    public event EventHandler<OverlayPreset>? DeleteRequested;
+
+    public PresetListBox() : base(48) { }
+
+    private Rectangle ButtonRect(int index, RowButton button)
+    {
+        var b = GetItemRectangle(index);
+        int s = this.S(26);
+        int right = b.Right - this.S(10) - (int)button * (s + this.S(4));
+        return new Rectangle(right - s, b.Y + (b.Height - s) / 2, s, s);
+    }
+
+    private RowButton? ButtonAt(int index, Point p)
+    {
+        foreach (RowButton button in Enum.GetValues<RowButton>())
+            if (ButtonRect(index, button).Contains(p)) return button;
+        return null;
+    }
+
+    protected override bool HoverPartChanged(int index, Point from, Point to) => ButtonAt(index, from) != ButtonAt(index, to);
+
+    protected override void WndProc(ref Message m)
+    {
+        // Handle the row's buttons before the list treats the click as a selection.
+        if (m.Msg is WM_LBUTTONDOWN or WM_LBUTTONDBLCLK)
+        {
+            long lp = m.LParam.ToInt64();
+            var pt = new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF));
+            int index = IndexFromPoint(pt);
+            if (index >= 0 && Items[index] is OverlayPreset preset && ButtonAt(index, pt) is RowButton button)
+            {
+                SelectedIndex = index;
+                (button switch
+                {
+                    RowButton.Apply => ApplyRequested,
+                    RowButton.Rename => RenameRequested,
+                    _ => DeleteRequested,
+                })?.Invoke(this, preset);
+                return;
+            }
+        }
+        base.WndProc(ref m);
+    }
+
+    protected override void DrawItemContent(DrawItemEventArgs e)
+    {
+        if (e.Index < 0 || e.Index >= Items.Count || Items[e.Index] is not OverlayPreset preset)
+        {
+            ClearRow(e);
+            return;
+        }
+
+        DrawRow(e, null, preset.Name, preset.Summary, this.S(94), this.S(22), glyph: Theme.GlyphPreset);
+
+        bool selected = (e.State & DrawItemState.Selected) != 0;
+        if (!selected && e.Index != HoverIndex) return;
+
+        var g = e.Graphics;
+        foreach (var (button, glyph, hoverColor) in new[]
+        {
+            (RowButton.Apply, Theme.GlyphPlay, Theme.Accent),
+            (RowButton.Rename, Theme.GlyphEdit, Theme.Border),
+            (RowButton.Delete, Theme.GlyphClose, Color.FromArgb(90, Theme.Danger)),
+        })
+        {
+            var rect = ButtonRect(e.Index, button);
+            bool over = rect.Contains(MousePos);
+            if (over)
+            {
+                using var hover = new SolidBrush(hoverColor);
+                g.FillEllipse(hover, rect);
+            }
+            var font = button == RowButton.Delete ? this.Scaled(Theme.IconSmall) : this.Scaled(Theme.Icon);
+            Color color = over ? (button == RowButton.Rename ? Theme.Text : Color.White)
+                : button == RowButton.Apply ? Theme.Accent : Theme.TextMuted;
+            TextRenderer.DrawText(g, glyph, font, rect, color, GlyphFlags);
+        }
+    }
+}
+
+/// <summary>Which overlay's menu to show, and where (screen coordinates).</summary>
+internal sealed record OverlayMenuRequest(OverlayItem Item, Point ScreenPoint);

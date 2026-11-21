@@ -19,6 +19,8 @@ internal static class NativeMethods
 
     public const int WM_NCHITTEST = 0x0084;
     public const int WM_HOTKEY = 0x0312;
+    public const int WM_MOUSEWHEEL = 0x020A;
+    public const int MK_CONTROL = 0x0008;
     public const int WM_SIZING = 0x0214;
     public const int WM_MOVING = 0x0216;
     public const int WM_ENTERSIZEMOVE = 0x0231;
@@ -181,6 +183,15 @@ internal static class NativeMethods
     public static extern IntPtr CreateDIBSection(IntPtr hdc, ref BITMAPINFOHEADER pbmi, uint usage,
         out IntPtr ppvBits, IntPtr hSection, uint offset);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maxCount);
+
+    public static string GetWindowClass(IntPtr hWnd)
+    {
+        var sb = new StringBuilder(256);
+        return GetClassName(hWnd, sb, sb.Capacity) > 0 ? sb.ToString() : "";
+    }
+
     [DllImport("user32.dll")]
     public static extern bool IsWindow(IntPtr hWnd);
 
@@ -265,7 +276,8 @@ internal static class NativeMethods
     }
 
     /// <summary>Lists top-level windows that a user would recognise as "applications".</summary>
-    public static List<WindowInfo> GetCapturableWindows()
+    /// <param name="includeIcons">False for frequent background scans (icons are the slow part).</param>
+    public static List<WindowInfo> GetCapturableWindows(bool includeIcons = true)
     {
         var result = new List<WindowInfo>();
         uint ownPid = (uint)Environment.ProcessId;
@@ -291,7 +303,7 @@ internal static class NativeMethods
                 processNames[pid] = processName;
             }
 
-            result.Add(new WindowInfo(hWnd, title, processName, GetWindowIcon(hWnd)));
+            result.Add(new WindowInfo(hWnd, title, processName, GetWindowClass(hWnd), includeIcons ? GetWindowIcon(hWnd) : null));
             return true;
         }, IntPtr.Zero);
 
@@ -299,7 +311,7 @@ internal static class NativeMethods
     }
 }
 
-internal sealed record WindowInfo(IntPtr Handle, string Title, string ProcessName, Bitmap? Icon)
+internal sealed record WindowInfo(IntPtr Handle, string Title, string ProcessName, string ClassName, Bitmap? Icon)
 {
     public override string ToString() => $"{Title}   [{ProcessName}]";
 }

@@ -119,7 +119,7 @@ internal sealed class CropPickerForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        Theme.UseDarkTitleBar(Handle);
+        Theme.ApplyTitleBar(Handle);
     }
 
     protected override void OnShown(EventArgs e)
@@ -283,8 +283,7 @@ internal sealed class SelectionLayer : Form
     private ResizeEdges _edges;
     private PointF _dragStart;
     private RectangleF _dragStartSelection;
-    private IntPtr _dib, _memDc;
-    private Size _dibSize;
+    private readonly LayeredSurface _surface = new();
 
     public event EventHandler? SelectionChanged;
     public event EventHandler? Committed;
@@ -461,9 +460,8 @@ internal sealed class SelectionLayer : Form
     public void Render()
     {
         if (!IsHandleCreated || Width <= 0 || Height <= 0) return;
-        EnsureBitmap();
 
-        using (var bmp = new Bitmap(Width, Height, Width * 4, PixelFormat.Format32bppPArgb, DibBits))
+        using (var bmp = _surface.Begin(Size))
         using (var g = Graphics.FromImage(bmp))
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -515,50 +513,7 @@ internal sealed class SelectionLayer : Form
             }
         }
 
-        var screenDc = GetDC(IntPtr.Zero);
-        try
-        {
-            var dst = new POINT(Left, Top);
-            var size = new SIZE { cx = Width, cy = Height };
-            var src = new POINT(0, 0);
-            var blend = new BLENDFUNCTION { BlendOp = AC_SRC_OVER, SourceConstantAlpha = 255, AlphaFormat = AC_SRC_ALPHA };
-            UpdateLayeredWindow(Handle, screenDc, ref dst, ref size, _memDc, ref src, 0, ref blend, ULW_ALPHA);
-        }
-        finally
-        {
-            ReleaseDC(IntPtr.Zero, screenDc);
-        }
-    }
-
-    private IntPtr DibBits { get; set; }
-
-    /// <summary>(Re)creates the 32-bit top-down DIB the layer is drawn into when the size changes.</summary>
-    private void EnsureBitmap()
-    {
-        if (_dib != IntPtr.Zero && _dibSize == Size) return;
-        FreeBitmap();
-        var header = new BITMAPINFOHEADER
-        {
-            biSize = System.Runtime.InteropServices.Marshal.SizeOf<BITMAPINFOHEADER>(),
-            biWidth = Width,
-            biHeight = -Height, // negative: top-down rows, matching GDI+'s layout
-            biPlanes = 1,
-            biBitCount = 32,
-        };
-        var screenDc = GetDC(IntPtr.Zero);
-        _memDc = CreateCompatibleDC(screenDc);
-        ReleaseDC(IntPtr.Zero, screenDc);
-        _dib = CreateDIBSection(_memDc, ref header, 0, out var bits, IntPtr.Zero, 0);
-        DibBits = bits;
-        SelectObject(_memDc, _dib);
-        _dibSize = Size;
-    }
-
-    private void FreeBitmap()
-    {
-        if (_memDc != IntPtr.Zero) DeleteDC(_memDc);
-        if (_dib != IntPtr.Zero) DeleteObject(_dib);
-        _memDc = _dib = IntPtr.Zero;
+        _surface.Present(Handle, Location);
     }
 
     protected override void OnResize(EventArgs e)
@@ -569,7 +524,7 @@ internal sealed class SelectionLayer : Form
 
     protected override void Dispose(bool disposing)
     {
-        FreeBitmap();
+        _surface.Dispose();
         base.Dispose(disposing);
     }
 

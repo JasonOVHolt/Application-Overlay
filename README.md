@@ -1,20 +1,18 @@
 # Window Overlay
 
-Mirror any window into an always-on-top overlay. For example, keep a movie playing in a corner while you work in another app.
-Overlays show the image only. When they're locked, clicks pass straight through to whatever is underneath.
+A Windows app that mirrors any window into an always-on-top overlay. For example, keep a movie playing in a corner while you
+work in another app. Overlays show the image only. When they're locked, clicks pass straight through to whatever is underneath.
 
-| Platform | Folder | Built with | Status |
-|---|---|---|---|
-| Windows 10/11 | [`windows/`](windows/README.md) | C# / WinForms, DWM thumbnails | Tested. Standalone exe in `windows/dist/` |
-| macOS 13+ | [`macos/`](macos/README.md) | Swift / SwiftUI, ScreenCaptureKit | Written but **not yet compiled**: needs a first build on a Mac |
-| Linux (X11) | [`linux/`](linux/README.md) | Python / GTK 3, GStreamer | Window listing and snapping tested; GUI not yet run |
+**Download:** grab `OverlayApp.exe` from the [latest release](https://github.com/JasonOVHolt/Application-Overlay/releases/latest).
+It's a single standalone file for Windows 10 and 11. Nothing needs installing.
 
-All three have the same features:
+Features:
 - **Multiple overlays:** run several at once, including several of the same window, each cropped to a different part.
-- **Per-overlay settings:** opacity and crop for each overlay. Windows and Linux also have "client area only", which hides the title bar.
-- **Overlay mode:** locks every overlay and makes them all click-through. A global hotkey toggles it (default Ctrl+Alt+O, or ⌃⌥O on
-  macOS), and you can change the hotkey.
-- **Snap to edges:** an optional setting that snaps overlays to screen edges (both the taskbar/Dock edge and the real screen edge)
-  and to each other.
+- **Per-overlay settings:** opacity, "client area only" (hides the title bar), and crop. Crop with sliders, or drag a
+  rectangle around exactly the part you want.
+- **Overlay mode:** locks every overlay and makes them click-through. Toggle it with a global hotkey (default Ctrl+Alt+O).
+- **Hide and show:** hide every overlay with another global hotkey (default Ctrl+Alt+H), or hide them one at a time.
+- **Snap to edges:** an optional setting that snaps overlays to screen edges, the taskbar and each other.
+- **Update check:** the app tells you when a newer release is on GitHub.
 
-See each folder's README for how to build and run it, and for that platform's limitations.
+The source, build steps and limitations are in [`windows/`](windows/README.md).

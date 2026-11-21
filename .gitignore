@@ -1,7 +1,2 @@
 bin/
 obj/
-# macOS (Swift)
-macos/.build/
-macos/build/
-# Linux (Python)
-__pycache__/
